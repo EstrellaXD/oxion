@@ -1,383 +1,212 @@
 # Oxion
 
-A universal mass spectrometry file reader. Fast, cross-platform, no .NET required.
+A pure Rust reader for Thermo Scientific RAW mass spectrometry files. No .NET runtime or Mono required.
 
-Oxion reads Thermo RAW, Shimadzu LCD, and mzML files directly from their binary formats, achieving **up to 700x faster scan decoding** than the official .NET RawFileReader library. It provides a CLI tool, a desktop GUI converter, and Python bindings with NumPy integration.
+Parses the Thermo RAW binary format directly, achieving **100-150x faster scan decoding** and **8-10x faster XIC extraction** compared to the official .NET RawFileReader library.
 
-## Table of Contents
+## Requirements
 
-- [Installation](#installation)
-- [Supported Formats](#supported-formats)
-- [CLI Reference](#cli-reference)
-- [Python API](#python-api)
-- [GUI Converter](#gui-converter)
-- [Performance](#performance)
-- [License](#license)
+- [Rust](https://www.rust-lang.org/tools/install) 1.70+ (2021 edition)
+- For Python bindings: Python 3.8+ and [maturin](https://github.com/PyO3/maturin)
 
----
-
-## Installation
-
-### CLI
-
-Download the latest binary for your platform from [Releases](https://github.com/EstrellaXD/oxion/releases):
-
-| Platform | File | Install |
-|----------|------|---------|
-| **Linux x86_64** | `ms-reader-x86_64-unknown-linux-gnu.tar.gz` | `tar xzf ms-reader-*.tar.gz` |
-| **Linux aarch64** | `ms-reader-aarch64-unknown-linux-gnu.tar.gz` | `tar xzf ms-reader-*.tar.gz` |
-| **macOS Intel** | `ms-reader-x86_64-apple-darwin.tar.gz` | `tar xzf ms-reader-*.tar.gz` |
-| **macOS Apple Silicon** | `ms-reader-aarch64-apple-darwin.tar.gz` | `tar xzf ms-reader-*.tar.gz` |
-| **Windows x64** | `ms-reader-x86_64-pc-windows-msvc.zip` | Extract zip |
-
-After extracting, optionally move `ms-reader` to a directory on your `PATH`.
-
-### Python
+## Building
 
 ```bash
-pip install rawfilereaders
+cargo build --release
 ```
 
-Requires Python 3.11+. Pre-built wheels are available for Linux (x86_64, aarch64), macOS (Intel, Apple Silicon), and Windows (x64). Wheels can also be downloaded from [Releases](https://github.com/EstrellaXD/oxion/releases) for offline install:
+This builds all workspace crates including the core library and the CLI tool.
+
+## CLI Usage
+
+The `oxion-cli` crate provides a command-line interface for common operations.
+
+### File information
 
 ```bash
-pip install rawfilereaders-*.whl
+cargo run --release -p oxion-cli -- info sample.raw
 ```
 
-### GUI
+Output includes instrument model, serial number, scan count, RT range, and mass range.
 
-Download the desktop converter from [Releases](https://github.com/EstrellaXD/oxion/releases):
-
-| Platform | File |
-|----------|------|
-| macOS (Intel + Apple Silicon) | `raw-converter-*.tar.gz` |
-| Linux | `raw-converter-*.deb` |
-| Windows | `raw-converter-*.msi` or `*-setup.exe` |
-
----
-
-## Supported Formats
-
-| Format | Extension | Read | Convert to mzML |
-|--------|-----------|------|-----------------|
-| Thermo RAW | `.raw` | Full (v57-66, all Orbitrap/LTQ/Astral instruments) | Yes |
-| Shimadzu LCD | `.lcd` | Scans, chromatograms, MRM events | No |
-| mzML | `.mzml`, `.mzml.gz` | Full (indexed + non-indexed, gzip) | N/A |
-
-### Thermo RAW Details
-
-- Supports format versions 57 through 66 (covering instruments from LTQ through Orbitrap Astral)
-- Reads both 32-bit and 64-bit address modes
-- Decodes centroid, profile, FT, and LT packet types
-- Extracts trailer extra metadata (86+ fields including AGC, injection time, charge state)
-- No .NET, Mono, or Wine required
-
----
-
-## CLI Reference
-
-```
-ms-reader <COMMAND> [OPTIONS]
-```
-
-### `info` - File Information
-
-Display instrument model, scan count, RT range, mass range, and trailer field names.
+### TIC export
 
 ```bash
-ms-reader info sample.raw
-ms-reader info data.mzML
-```
-
-### `scan` - Single Scan Export
-
-Export a single scan as JSON with m/z and intensity arrays.
-
-```bash
-ms-reader scan sample.raw -n 1          # First scan
-ms-reader scan sample.raw -n 5000       # Scan number 5000
-```
-
-### `tic` - Total Ion Chromatogram
-
-Export the TIC as a two-column CSV (rt, intensity). Sub-millisecond extraction from the scan index (no scan decoding needed).
-
-```bash
-ms-reader tic sample.raw                # Print to stdout
-ms-reader tic sample.raw -o tic.csv     # Save to file
-```
-
-### `xic` - Extracted Ion Chromatogram
-
-Extract one or more XIC traces from a file.
-
-```bash
-# Single target at 5 ppm (default)
-ms-reader xic sample.raw --mz 524.2644
-
-# Multiple targets in one pass (shared scan iteration)
-ms-reader xic sample.raw --mz 524.2644 --mz 445.12 --mz 302.05
-
-# MS1 only — skips MS2 scans, much faster for DDA data
-ms-reader xic sample.raw --mz 524.2644 --ms1-only
-
-# Custom tolerance
-ms-reader xic sample.raw --mz 524.2644 --ppm 10.0
+# Print to stdout
+cargo run --release -p oxion-cli -- tic sample.raw
 
 # Save to file
-ms-reader xic sample.raw --mz 524.2644 -o xic.csv
+cargo run --release -p oxion-cli -- tic sample.raw -o tic.csv
 ```
 
-### `batch-xic` - Multi-File Batch XIC
-
-Extract XIC traces across multiple files, align to a common RT grid, and output a CSV matrix.
+### XIC extraction
 
 ```bash
-ms-reader batch-xic \
-    -f file1.raw -f file2.raw -f file3.raw \
+# Single target, 5 ppm tolerance
+cargo run --release -p oxion-cli -- xic sample.raw --mz 524.2644 --ppm 5.0
+
+# MS1 scans only (faster for DDA data)
+cargo run --release -p oxion-cli -- xic sample.raw --mz 524.2644 --ms1-only
+
+# Multiple targets in a single pass
+cargo run --release -p oxion-cli -- xic sample.raw --mz 524.2644 --mz 445.12 --ms1-only
+```
+
+### Batch XIC across multiple files
+
+Extracts chromatograms from multiple RAW files, aligns to a common RT grid, and outputs a CSV matrix.
+
+```bash
+cargo run --release -p oxion-cli -- batch-xic \
+    -f file1.raw -f file2.raw \
     --mz 524.2644 --mz 445.12 \
-    --ppm 5.0 \
-    --rt-resolution 0.01 \
-    -o batch_output.csv
-
-# With RT range filter
-ms-reader batch-xic \
-    -f *.raw \
-    --mz 524.2644 \
-    --rt-range "2.0,15.0" \
-    -o filtered.csv
+    --rt-resolution 0.01 -o output.csv
 ```
 
-### `ms2-spectra` - DDA Fragment Extraction
-
-Find all MS2 scans matching a precursor m/z and export their fragment spectra.
+### Single scan export
 
 ```bash
-ms-reader ms2-spectra sample.raw --mz 524.2644 --ppm 10.0 -o fragments.csv
+# Export scan as JSON
+cargo run --release -p oxion-cli -- scan sample.raw -n 1
+
+# Show trailer extra data for a scan
+cargo run --release -p oxion-cli -- trailer sample.raw -n 1
 ```
 
-### `convert` - RAW to mzML Conversion
-
-Convert Thermo RAW files to indexed mzML format.
+### RAW to mzML conversion
 
 ```bash
-# Single file (output: sample.mzML in same directory)
-ms-reader convert sample.raw
+# Single file
+cargo run --release -p oxion-cli -- convert sample.raw
 
 # Specify output path
-ms-reader convert sample.raw -o output.mzML
+cargo run --release -p oxion-cli -- convert sample.raw -o output.mzML
 
-# Folder conversion (parallel, all .raw files)
-ms-reader convert ./raw_files/ -o ./mzml_output/
+# Folder conversion (all .raw files)
+cargo run --release -p oxion-cli -- convert ./raw_files/ -o ./mzml_output/
 
-# Options
-ms-reader convert sample.raw \
-    --mz-bits 32 \              # m/z precision: 32 or 64 (default: 64)
-    --intensity-bits 32 \       # intensity precision: 32 or 64 (default: 32)
-    --compression zlib \        # none or zlib (default: zlib)
-    --ms1-only \                # exclude MS2+ scans
-    --min-intensity 100 \       # filter peaks below threshold
-    --no-index                  # plain mzML without index
+# Custom precision and compression
+cargo run --release -p oxion-cli -- convert sample.raw \
+    --mz-bits 32 --intensity-bits 32 --compression zlib
 ```
 
-### `trailer` - Trailer Extra Data
-
-Display raw trailer metadata for a specific scan (Thermo RAW only).
+### Benchmarking
 
 ```bash
-ms-reader trailer sample.raw -n 1
+# Full scan decode benchmark
+cargo run --release -p oxion-cli -- benchmark sample.raw --parallel --mmap
+
+# XIC benchmark
+cargo run --release -p oxion-cli -- benchmark sample.raw --mmap --xic
 ```
 
-### `benchmark` - Performance Test
+## Library Usage (Rust)
 
-Benchmark scan decoding speed.
+Add `oxion` to your `Cargo.toml`:
+
+```toml
+[dependencies]
+oxion = { path = "crates/oxion" }
+```
+
+```rust
+use oxion::RawFile;
+
+// Open a RAW file (use open_mmap for better performance on large files)
+let raw = RawFile::open("sample.raw")?;
+
+// File metadata
+let meta = raw.metadata();
+println!("Instrument: {}", meta.instrument_model);
+println!("Scans: {}", raw.n_scans());
+println!("RT range: {:.2}-{:.2} min", raw.start_time(), raw.end_time());
+
+// Read a single scan
+let scan = raw.scan(1)?;
+println!("MS level: {:?}, RT: {:.4} min", scan.ms_level, scan.rt);
+println!("Centroid peaks: {}", scan.centroid_mz.len());
+
+// TIC from scan index (no decode needed, sub-millisecond)
+let tic = raw.tic();
+
+// XIC extraction
+let xic = raw.xic(524.2644, 5.0)?;          // all scans
+let xic = raw.xic_ms1(524.2644, 5.0)?;      // MS1 only (faster for DDA)
+
+// Batch XIC: multiple targets in a single scan pass
+let targets = vec![(524.2644, 5.0), (445.12, 5.0), (302.05, 5.0)];
+let xics = raw.xic_batch_ms1(&targets)?;
+
+// Parallel scan decode
+let scans = raw.scans_parallel(1..raw.n_scans() + 1)?;
+
+// Trailer extra data
+let trailer = raw.trailer_extra(1)?;
+```
+
+## Python Bindings
+
+Python bindings are provided via PyO3 in `crates/oxion-py/`.
+
+### Installation
 
 ```bash
-ms-reader benchmark sample.raw --mmap              # Sequential decode
-ms-reader benchmark sample.raw --mmap --parallel    # Parallel decode
-ms-reader benchmark sample.raw --mmap --xic         # XIC extraction benchmark
+cd crates/oxion-py
+pip install maturin
+maturin develop --release
 ```
 
----
-
-## Python API
-
-### Opening Files
+### Usage
 
 ```python
-import rawfilereaders
+import oxion
 
-# Auto-detect format from extension
-raw = rawfilereaders.open("sample.raw")           # Thermo RAW
-mzml = rawfilereaders.open("data.mzML")           # mzML
-lcd = rawfilereaders.open("sample.lcd")            # Shimadzu LCD
-
-# RAW file with memory-mapped I/O (faster for large files)
-raw = rawfilereaders.open("sample.raw", mmap=True)
-
-# Or use the format-specific class directly
-raw = rawfilereaders.RawFile("sample.raw", mmap=True)
+raw = oxion.RawFile("sample.raw")
+scan = raw.scan(1)
+print(f"MS level: {scan.ms_level}, points: {len(scan.mz)}")
 ```
-
-### File Metadata
-
-```python
-raw = rawfilereaders.RawFile("sample.raw")
-
-raw.n_scans              # Total number of scans
-raw.first_scan           # First scan number
-raw.last_scan            # Last scan number
-raw.start_time           # Start RT in minutes
-raw.end_time             # End RT in minutes
-raw.instrument_model     # Instrument model string
-raw.sample_name          # Sample name from acquisition
-raw.version              # RAW format version (57-66)
-```
-
-### Reading Scans
-
-```python
-# Get scan data as NumPy arrays
-mz, intensity = raw.scan(1)
-
-# Get scan metadata (no array decoding)
-info = raw.scan_info(1)
-info.scan_number         # 1
-info.rt                  # Retention time in minutes
-info.ms_level            # 1, 2, 3, ...
-info.polarity            # "positive" or "negative"
-info.tic                 # Total ion current
-info.base_peak_mz        # Base peak m/z
-info.base_peak_intensity # Base peak intensity
-info.filter_string       # e.g. "FTMS + p NSI Full ms [100.00-1000.00]"
-info.precursor_mz        # Precursor m/z (MS2+ only, None for MS1)
-info.precursor_charge    # Charge state (MS2+ only, None for MS1)
-
-# Read all MS1 scans in parallel
-all_ms1 = raw.all_ms1_scans(progress=True)  # list of (mz, intensity) tuples
-```
-
-### Chromatograms
-
-```python
-# TIC (sub-millisecond, from scan index)
-rt, intensity = raw.tic()
-
-# XIC (single target)
-rt, intensity = raw.xic(524.2644, ppm=5.0)
-
-# XIC restricted to MS1 scans (faster for DDA)
-rt, intensity = raw.xic_ms1(524.2644, ppm=5.0)
-
-# Batch XIC (multiple targets, single scan pass)
-targets = [(524.2644, 5.0), (445.12, 5.0), (302.05, 10.0)]
-results = raw.xic_batch_ms1(targets, progress=True)
-for rt, intensity in results:
-    print(f"  {len(rt)} points")
-```
-
-### DDA / DIA Analysis
-
-```python
-# Acquisition type detection
-raw.acquisition_type()     # "dda", "dia", "ms1_only", or "mixed"
-
-# MS level queries
-raw.ms_level_of_scan(100)  # 1 or 2
-raw.is_ms2_scan(100)       # True/False
-raw.scan_numbers_by_level(2)  # [4, 5, 6, 8, ...]
-
-# Precursor information
-precursors = raw.precursor_list()     # Unique precursor m/z as NumPy array
-parent = raw.parent_ms1_scan(5000)    # Parent MS1 scan number for scan 5000
-
-# Find MS2 scans for a precursor
-ms2_scans = raw.ms2_scans_for_precursor(524.2644, tolerance_ppm=10.0)
-for s in ms2_scans:
-    print(f"  Scan {s.scan_number}, RT={s.rt:.2f}, CE={s.collision_energy}")
-
-# All MS2 scan metadata (fast, no decoding)
-all_ms2 = raw.all_ms2_scan_info()
-```
-
-### DIA Windows
-
-```python
-# Get unique isolation windows
-windows = raw.isolation_windows()
-for w in windows:
-    print(w)  # IsolationWindow(center_mz=500.0, width=25.0, ce=30.0, activation=HCD)
-
-# Get MS2 scans for a window
-scans = raw.scans_for_window(windows[0])
-
-# XIC within a DIA window
-rt, intensity = raw.xic_ms2_window(524.2644, ppm=5.0, window=windows[0])
-```
-
-### Trailer Metadata
-
-```python
-# Available trailer field names
-fields = raw.trailer_fields()  # ["Charge State", "Ion Injection Time (ms)", ...]
-
-# Trailer data for a specific scan
-data = raw.trailer_extra(1)    # dict: {"Charge State": "2", "Ion Injection Time (ms)": "35.00", ...}
-```
-
-### Progress Bars
-
-Most long-running operations support `tqdm` progress bars:
-
-```python
-# Install tqdm for progress bar support
-# pip install tqdm
-
-rt, intensity = raw.xic(524.2644, progress=True)
-results = raw.xic_batch_ms1(targets, progress=True)
-scans = raw.all_ms1_scans(progress=True)
-```
-
----
-
-## GUI Converter
-
-The desktop application provides drag-and-drop RAW-to-mzML conversion with a visual interface.
-
-- Drag one or more `.raw` files onto the window
-- Configure output settings (precision, compression, MS1-only filter)
-- Click convert and monitor progress
-- Output mzML files are written alongside the source files or to a chosen directory
-
----
 
 ## Performance
 
-Benchmarked on Apple Silicon (M-series) with a 517 MB DDA file (73,306 scans):
+Benchmarked on Apple Silicon against Thermo .NET RawFileReader via Mono/pythonnet:
 
-| Operation | Oxion | .NET RawFileReader | Speedup |
-|-----------|-------|--------------------|---------|
-| Full scan decode (sequential) | 10 ms | 7,067 ms | **700x** |
-| Full scan decode (parallel) | 6.6 ms | N/A | **1070x** vs .NET |
-| XIC extraction (2000 targets) | 33 ms | 4,200 ms | **127x** |
-| Batch XIC (10 targets) | 0.7 ms | N/A | Near-zero marginal cost |
-| TIC from index | < 1 ms | N/A | No scan decode needed |
-| RAW-to-mzML conversion | 2.5 s | ~30 s | **12x** |
+| Operation | Rust (parallel+mmap) | .NET | Speedup |
+|-----------|---------------------|------|---------|
+| Full scan decode (227K scans) | 45 ms | 7,067 ms | **157x** |
+| XIC extraction (MS1) | ~0.6 s | ~5.3 s | **~8x** |
+| Batch XIC (10 targets) | ~0.66 s | N/A | Near-zero marginal cost per target |
+| TIC (index-based) | < 1 ms | N/A | No scan decode needed |
 
-### Why is Oxion fast?
+See [BENCHMARK.md](BENCHMARK.md) for detailed results.
 
-- **Direct binary parsing** - reads the RAW format directly without .NET runtime overhead
-- **Memory-mapped I/O** - leverages OS virtual memory for zero-copy file access
-- **Zero-allocation hot paths** - XIC extraction reads raw bytes in-place with no heap allocations
-- **Buffer reuse** - scan decoding reuses pre-allocated buffers, eliminating ~220k allocations per file
-- **Parallel processing** - multi-core scan decoding and folder conversion via work-stealing
-- **Optimized encoding** - mzML conversion reuses compression and base64 buffers across scans
-- **LTO + codegen-units=1** - whole-program link-time optimization for maximum inlining
+## Project Structure
 
----
+```
+crates/
+  cfb-reader/              OLE2 compound file container reader
+  oxion/                   Core library (parsing, scan decode, XIC)
+  oxion-cli/               Command-line interface
+  oxion-py/                PyO3 Python bindings
+  oxion-gui/               Tauri v2 + Vue 3 GUI for RAW-to-mzML conversion
+docs/                      Format specifications and reference
+tools/
+  ground-truth/            Python ground truth exporter
+  ground-truth-exporter/   C# ground truth exporter
+  hex-analyzer/            Binary format analysis tool
+vendor/libs/               Thermo .NET DLLs (reference only)
+test-data/                 Test RAW files (not in git)
+```
+
+## Documentation
+
+- [FORMAT_SPEC.md](docs/FORMAT_SPEC.md) -- Binary format specification
+- [SCAN_DATA_ENCODING.md](docs/SCAN_DATA_ENCODING.md) -- Scan data encoding details
+- [OLE2_STRUCTURE.md](docs/OLE2_STRUCTURE.md) -- OLE2 container layout
+- [VERSION_DIFFERENCES.md](docs/VERSION_DIFFERENCES.md) -- Version-specific differences
+- [BENCHMARK.md](BENCHMARK.md) -- Performance benchmarks
 
 ## License
 
-Proprietary. Distributed as pre-compiled binaries and Python wheels.
+The Thermo RawFileReader DLLs in `vendor/libs/` are subject to the [Thermo Fisher license](LICENSE.md). The Rust source code in this repository is private and proprietary.
 
-For questions or bug reports, please open an [issue](https://github.com/EstrellaXD/oxion/issues).
+RawFileReader reading tool. Copyright (c) 2016 by Thermo Fisher Scientific, Inc. All rights reserved.
