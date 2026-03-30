@@ -363,59 +363,32 @@ The desktop application provides drag-and-drop RAW-to-mzML conversion with a vis
 
 ## Performance
 
-Benchmarked on Apple M5 Pro with a 796 MB Orbitrap Astral file (228,790 scans). Measured with [hyperfine](https://github.com/sharkdp/hyperfine) (5 runs, 1 warmup).
+Decode 228,790 scans in 84 ms. Convert 796 MB RAW to mzML in 5.5 seconds.
 
-<p align="center">
-  <img src="assets/figure_combined.png" alt="Oxion Benchmark Overview" width="100%">
-</p>
-
-### Conversion (RAW to mzML)
-
-| Tool | Time |
-|------|------|
-| **Oxion** | **5.5 s** |
-
-### Scan Decode Throughput
-
-| Mode | Time (228K scans) | Throughput |
-|------|-------------------|------------|
-| Sequential | 151 ms | 1.5 M scans/s |
-| **Parallel** | **84 ms** | **2.7 M scans/s** |
-| Parallel + mmap | 96 ms | 2.4 M scans/s |
-
-### Data Access Operations
+Benchmarked on Apple M5 Pro with a Thermo Orbitrap Astral file. Timed with [hyperfine](https://github.com/sharkdp/hyperfine).
 
 | Operation | Time |
 |-----------|------|
-| Random scan access | 79 ms |
-| XIC (single target) | 92 ms |
-| TIC extraction | 106 ms |
+| Full scan decode (228K scans) | **84 ms** — 2.7 M scans/s |
+| RAW → mzML conversion | **5.5 s** |
+| XIC extraction (single target) | **92 ms** |
+| XIC extraction (2,000 targets) | **266 ms** — 0.13 ms/target |
+| TIC extraction | **106 ms** |
 
-### XIC Scaling
-
-XIC extraction scales sub-linearly with the number of targets due to shared scan iteration:
-
-| Targets | Time | Per-target cost |
-|---------|------|-----------------|
-| 1 | 80 ms | 80 ms |
-| 10 | 84 ms | 8.4 ms |
-| 100 | 88 ms | 0.88 ms |
-| 500 | 109 ms | 0.22 ms |
-| 2,000 | 266 ms | 0.13 ms |
+Batch XIC scales sub-linearly: all targets share a single scan pass, so 2,000 targets cost only 3x more than one.
 
 <p align="center">
-  <img src="assets/xic_scaling.png" alt="XIC Scaling: Absolute Time and Per-Target Cost" width="100%">
+  <img src="assets/figure_combined.png" alt="Oxion Benchmark — 796 MB Orbitrap Astral" width="100%">
 </p>
 
 ### Why is Oxion fast?
 
-- **Direct binary parsing** — reads the RAW format directly without .NET runtime overhead
-- **Memory-mapped I/O** — leverages OS virtual memory for zero-copy file access
-- **Zero-allocation hot paths** — XIC extraction reads raw bytes in-place with no heap allocations
-- **Buffer reuse** — scan decoding reuses pre-allocated buffers, eliminating ~220k allocations per file
-- **Parallel processing** — multi-core scan decoding and folder conversion via work-stealing
-- **Optimized encoding** — mzML conversion reuses compression and base64 buffers across scans
-- **LTO + codegen-units=1** — whole-program link-time optimization for maximum inlining
+- **Direct binary parsing** — reads the RAW format natively, no .NET runtime
+- **Memory-mapped I/O** — zero-copy file access via OS virtual memory
+- **Zero-allocation hot paths** — XIC reads raw bytes in-place, no heap allocations
+- **Buffer reuse** — pre-allocated decode buffers, eliminating ~220K allocations per file
+- **Parallel processing** — work-stealing across all cores for scan decode and folder conversion
+- **LTO + codegen-units=1** — whole-program link-time optimization
 
 ---
 
