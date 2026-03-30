@@ -363,16 +363,51 @@ The desktop application provides drag-and-drop RAW-to-mzML conversion with a vis
 
 ## Performance
 
-Benchmarked on Apple Silicon (M-series) with a 517 MB DDA file (73,306 scans):
+Benchmarked with a 796 MB Orbitrap Astral file (228,790 scans). Measured with [hyperfine](https://github.com/sharkdp/hyperfine) (10 runs, 3 warmups).
+
+<p align="center">
+  <img src="assets/figure_combined.png" alt="Oxion Benchmark Overview" width="100%">
+</p>
+
+### Conversion (RAW to mzML)
+
+| Tool | Time | Speedup |
+|------|------|---------|
+| **Oxion** | **15.7 s** | — |
+| .NET RawFileReader | 26.2 s | 1.7x slower |
+| ThermoRawFileParser | 162.4 s | 10.4x slower |
+
+### Scan Decode Throughput
+
+| Mode | Time (228K scans) | Throughput |
+|------|-------------------|------------|
+| Sequential | 938 ms | 0.24 M scans/s |
+| Parallel | 906 ms | 0.25 M scans/s |
+| **Parallel + mmap** | **299 ms** | **0.77 M scans/s** |
+
+### Data Access Operations
 
 | Operation | Oxion | .NET RawFileReader | Speedup |
 |-----------|-------|--------------------|---------|
-| Full scan decode (sequential) | 10 ms | 7,067 ms | **700x** |
-| Full scan decode (parallel) | 6.6 ms | N/A | **1070x** vs .NET |
-| XIC extraction (2000 targets) | 33 ms | 4,200 ms | **127x** |
-| Batch XIC (10 targets) | 0.7 ms | N/A | Near-zero marginal cost |
-| TIC from index | < 1 ms | N/A | No scan decode needed |
-| RAW-to-mzML conversion | 2.5 s | ~30 s | **12x** |
+| Random scan access | 685 ms | 2.47 s | **3.6x** |
+| TIC extraction | 760 ms | 2.23 s | **2.9x** |
+| XIC (single target) | 737 ms | 3.28 s | **4.5x** |
+
+### XIC Scaling
+
+XIC extraction scales sub-linearly with the number of targets due to shared scan iteration:
+
+| Targets | Time | Per-target cost |
+|---------|------|-----------------|
+| 1 | 698 ms | 698 ms |
+| 10 | 694 ms | 69 ms |
+| 100 | 716 ms | 7.2 ms |
+| 500 | 778 ms | 1.6 ms |
+| 2,000 | 1.08 s | 0.54 ms |
+
+<p align="center">
+  <img src="assets/xic_scaling.png" alt="XIC Scaling: Absolute Time and Per-Target Cost" width="100%">
+</p>
 
 ### Why is Oxion fast?
 
