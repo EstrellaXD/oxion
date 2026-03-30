@@ -2,7 +2,9 @@
 
 A universal mass spectrometry file reader. Fast, cross-platform, no .NET required.
 
-Oxion reads Thermo RAW, Shimadzu LCD, and mzML files directly from their binary formats, achieving **up to 700x faster scan decoding** than the official .NET RawFileReader library. It provides a CLI tool, a desktop GUI converter, and Python bindings with NumPy integration.
+Oxion reads mass spectrometry files from **7 vendor formats** directly from their binary formats, achieving **up to 700x faster scan decoding** than the official .NET RawFileReader library. It provides a CLI tool, a desktop GUI converter, and Python bindings with NumPy integration.
+
+Supported vendors: **Thermo**, **Bruker**, **Waters**, **Agilent**, **Shimadzu**, **Sciex**, plus the open **mzML** standard.
 
 ## Table of Contents
 
@@ -58,19 +60,23 @@ Download the desktop converter from [Releases](https://github.com/EstrellaXD/oxi
 
 ## Supported Formats
 
-| Format | Extension | Read | Convert to mzML |
-|--------|-----------|------|-----------------|
-| Thermo RAW | `.raw` | Full (v57-66, all Orbitrap/LTQ/Astral instruments) | Yes |
-| Shimadzu LCD | `.lcd` | Scans, chromatograms, MRM events | No |
-| mzML | `.mzml`, `.mzml.gz` | Full (indexed + non-indexed, gzip) | N/A |
+| Format | Extension | Read | Convert to mzML | Notes |
+|--------|-----------|------|-----------------|-------|
+| Thermo RAW | `.raw` | Full | Yes | v57-66, all Orbitrap/LTQ/Astral instruments |
+| Bruker TDF/TSF | `.d` | Full | Yes | timsTOF (4D ion mobility), QTOF |
+| Waters .raw | `.raw` (directory) | Full | Yes | MassLynx SQD2, ZQ, SIR/MRM |
+| Agilent .d | `.d` (directory) | Full | Yes | MassHunter + ChemStation |
+| Shimadzu LCD | `.lcd` | Full | Yes | MRM, triple-quad |
+| Sciex WIFF | `.wiff` | Metadata | Planned | OLE2 metadata extraction |
+| mzML | `.mzml`, `.mzml.gz` | Full | N/A | Indexed + non-indexed, gzip |
 
-### Thermo RAW Details
+### Vendor Format Details
 
-- Supports format versions 57 through 66 (covering instruments from LTQ through Orbitrap Astral)
-- Reads both 32-bit and 64-bit address modes
-- Decodes centroid, profile, FT, and LT packet types
-- Extracts trailer extra metadata (86+ fields including AGC, injection time, charge state)
-- No .NET, Mono, or Wine required
+- **Thermo RAW**: Format versions 57-66, centroid/profile/FT/LT decoders, trailer metadata (86+ fields). No .NET required.
+- **Bruker .d**: SQLite + zstd-compressed binary blobs, TOF-to-m/z quadratic calibration, full ion mobility (1/K0), ddaPASEF and diaPASEF support.
+- **Waters .raw**: All 4 MassLynx binary encodings (2/4/6/8-byte), polynomial m/z calibration, multi-function support.
+- **Agilent .d**: MassHunter (MSScan.bin + MSPeak.bin/MSProfile.bin) and ChemStation (DATA.MS big-endian) sub-formats.
+- **Sciex WIFF**: OLE2 metadata extraction; scan data decoding pending (format is not publicly documented).
 
 ---
 
@@ -207,10 +213,14 @@ oxion benchmark sample.raw --mmap --xic         # XIC extraction benchmark
 ```python
 import oxion
 
-# Auto-detect format from extension
+# Auto-detect format from extension (works for all 7 formats)
 raw = oxion.open("sample.raw")           # Thermo RAW
 mzml = oxion.open("data.mzML")           # mzML
 lcd = oxion.open("sample.lcd")            # Shimadzu LCD
+bruker = oxion.open("data.d")             # Bruker TDF/TSF
+waters = oxion.open("data.raw")           # Waters .raw directory
+agilent = oxion.open("data.D")            # Agilent .d directory
+wiff = oxion.open("data.wiff")            # Sciex WIFF
 
 # RAW file with memory-mapped I/O (faster for large files)
 raw = oxion.open("sample.raw", mmap=True)
