@@ -383,10 +383,10 @@ Internal timing after file open — measures only the operation itself.
 
 | Operation | Oxion (macOS) | .NET (macOS) | Oxion (Linux) | .NET (Linux) |
 |-----------|---------------|--------------|---------------|--------------|
-| Single scan decode | **< 0.1 ms** | 0.01 ms | 0.001 ms | 0.02 ms |
-| TIC (228K scans) | **0.3 ms** | 87 ms | **0.4 ms** | 36 ms |
-| XIC (single target) | **0.7 ms** | 170 ms | **3.3 ms** | 302 ms |
-| XIC (2,000 targets) | **9.8 ms** | — | **99 ms** | — |
+| Full scan decode (228K) | **40 ms** | 352 ms | **213 ms** | 721 ms |
+| TIC (228K scans) | **0.4 ms** | 135 ms | **0.3 ms** | 81 ms |
+| XIC (single target) | **0.9 ms** | 159 ms | **3.0 ms** | 289 ms |
+| XIC (2,000 targets) | **9.6 ms** | 6,258 ms | **94 ms** | 8,534 ms |
 
 <p align="center">
   <img src="assets/figure_cross_platform.png" alt="Oxion Benchmark — 796 MB Orbitrap Astral" width="100%">
