@@ -378,7 +378,7 @@ Measured with [hyperfine](https://github.com/sharkdp/hyperfine) on Apple M5 Pro 
 | Single scan access | **79 ms** | 720 ms | **522 ms** |
 
 <p align="center">
-  <img src="assets/figure_combined.png" alt="Oxion Benchmark — 796 MB Orbitrap Astral" width="100%">
+  <img src="assets/figure_cross_platform.png" alt="Oxion Benchmark — 796 MB Orbitrap Astral" width="100%">
 </p>
 
 ### Runtime comparison
