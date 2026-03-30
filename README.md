@@ -366,16 +366,15 @@ The desktop application provides drag-and-drop RAW-to-mzML conversion with a vis
 Benchmarked with a 796 MB Thermo Orbitrap Astral file (228,790 scans).
 The CLI is a 2 MB static binary with no runtime dependencies.
 
-Measured with [hyperfine](https://github.com/sharkdp/hyperfine) on Apple M5 Pro (macOS) and Windows x86_64.
+Measured with [hyperfine](https://github.com/sharkdp/hyperfine) on Apple M5 Pro (macOS), Windows x86_64, and Linux EPYC 9554.
 
-| Operation | Oxion (macOS) | Oxion (Windows) | .NET RawFileReader (Windows) |
-|-----------|---------------|-----------------|------------------------------|
-| Full scan decode (228K scans) | **84 ms** (2.7 M/s) | 804 ms | — |
-| RAW → mzML conversion | **5.5 s** | **9.4 s** | 9.8 s |
-| XIC extraction (single target) | **92 ms** | **723 ms** | 1015 ms |
-| XIC extraction (2,000 targets) | **266 ms** (0.13 ms/target) | — | — |
-| TIC extraction | **106 ms** | 737 ms | **317 ms** |
-| Single scan access | **79 ms** | 720 ms | **522 ms** |
+| Operation | Oxion (macOS) | .NET (macOS) | Oxion (Windows) | .NET (Windows) | Oxion (Linux) | .NET (Linux) |
+|-----------|---------------|--------------|-----------------|----------------|---------------|--------------|
+| Full scan decode (228K scans) | **84 ms** | — | 804 ms | — | 393 ms | — |
+| RAW → mzML conversion | **5.5 s** | 12.1 s | **9.4 s** | 9.8 s | **13.8 s** | 22.8 s |
+| XIC extraction | **92 ms** | 2109 ms | **723 ms** | 1015 ms | **645 ms** | 2133 ms |
+| TIC extraction | **106 ms** | 727 ms | 737 ms | **317 ms** | **657 ms** | 855 ms |
+| Single scan access | **79 ms** | 1105 ms | 720 ms | **522 ms** | **574 ms** | 1179 ms |
 
 <p align="center">
   <img src="assets/figure_cross_platform.png" alt="Oxion Benchmark — 796 MB Orbitrap Astral" width="100%">
