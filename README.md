@@ -136,7 +136,7 @@ oxion xic sample.raw --mz 524.2644 -o xic.csv
 
 ### `batch-xic` - Multi-File Batch XIC
 
-Extract XIC traces across multiple files, align to a common RT grid, and output a CSV matrix.
+Extract XIC traces across multiple files, align to a common RT grid, and output a CSV matrix. Uses a memory-bounded two-pass pipeline (mmap prescan → chunked extraction) that scales to hundreds of files on NAS.
 
 ```bash
 oxion batch-xic \
@@ -152,6 +152,29 @@ oxion batch-xic \
     --mz 524.2644 \
     --rt-range "2.0,15.0" \
     -o filtered.csv
+
+# Control parallelism and timeout for NAS/network storage
+oxion batch-xic \
+    -f *.raw --mz-file targets.txt \
+    --max-concurrent 4 \
+    --timeout 120 \
+    -o output.csv
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--max-concurrent` | 4 (auto) | Max files processed in parallel. Lower = less memory. |
+| `--timeout` | 120 | Per-file read timeout in seconds. Skips stalled NAS reads. 0 = disable. |
+
+### `bench-concurrency` - I/O vs CPU Profiling
+
+Benchmark file-open (I/O) vs XIC extraction (CPU) at different concurrency levels to find the optimal `--max-concurrent` for your storage.
+
+```bash
+oxion bench-concurrency /path/to/raw/files \
+    --targets 2500 \
+    --concurrency 1,2,4,8,16 \
+    --max-files 20
 ```
 
 ### `ms2-spectra` - DDA Fragment Extraction
@@ -335,6 +358,57 @@ fields = raw.trailer_fields()  # ["Charge State", "Ion Injection Time (ms)", ...
 data = raw.trailer_extra(1)    # dict: {"Charge State": "2", "Ion Injection Time (ms)": "35.00", ...}
 ```
 
+### Multi-File Batch XIC
+
+Extract aligned chromatograms across many files with bounded memory.
+
+```python
+import oxion
+
+files = ["sample1.raw", "sample2.raw", "sample3.raw"]
+targets = [(524.2644, 5.0), (445.12, 5.0)]
+
+# Standard batch — returns 3D tensor (samples × targets × timepoints)
+tensor, rt_grid, sample_names = oxion.batch_xic(
+    files, targets,
+    progress=True,          # tqdm progress bar
+    max_concurrent=4,       # parallel files (tune for NAS)
+    timeout_secs=120,       # skip stalled files after 2 min
+)
+# tensor.shape: (3, 2, n_timepoints), dtype=float64
+
+# Half-memory mode — f32 intensities (sufficient for XIC data)
+tensor, rt_grid, names = oxion.batch_xic(
+    files, targets,
+    use_f32=True,           # returns float32 tensor
+    max_concurrent=4,
+)
+# tensor.dtype: float32
+```
+
+### Streaming Batch XIC
+
+For maximum memory control (hundreds of files × thousands of targets), use the two-step streaming API:
+
+```python
+import oxion
+import numpy as np
+
+files = [f"sample_{i}.raw" for i in range(270)]
+targets = [(mz, 5.0) for mz in np.linspace(70, 1050, 2500)]
+
+# Step 1: Prescan — lightweight RT grid computation (mmap, ~1s for 270 files)
+rt_grid, valid_files, sample_names = oxion.prescan_batch_xic(files)
+
+# Step 2: Process one file at a time — you control memory
+for i, path in enumerate(valid_files):
+    data = oxion.extract_xic_onto_grid(path, targets, rt_grid)
+    # data.shape: (2500, n_timepoints), dtype=float32
+    
+    # Save incrementally, build sparse matrix, stream to HDF5, etc.
+    # Only ~1 GB in memory at a time instead of ~40 GB
+```
+
 ### Progress Bars
 
 Most long-running operations support `tqdm` progress bars:
@@ -407,6 +481,7 @@ Internal timing after file open — measures only the operation itself.
 - **Zero-allocation hot paths** — XIC reads raw bytes in-place, no heap allocations
 - **Buffer reuse** — pre-allocated decode buffers, eliminating ~220K allocations per file
 - **Parallel processing** — work-stealing across all cores for scan decode and folder conversion
+- **Bounded-memory batch pipeline** — two-pass chunked extraction scales to 270+ files on NAS without exceeding available RAM
 - **LTO + codegen-units=1** — whole-program link-time optimization
 
 ---
